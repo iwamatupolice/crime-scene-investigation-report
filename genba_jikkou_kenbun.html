@@ -229,7 +229,7 @@
   function toObj(){
     const o={}; FIELDS.forEach(k=> o[k]=$('#'+k) instanceof HTMLTextAreaElement ? $('#'+k).value.trim() : $('#'+k).value||'');
     o.docId = $('#docId').textContent.replace('DOC: ','');
-    o.images = images; // データURL込み（注意：大きいと保存に時間かかる）
+    o.images = images; // データURL込み
     return o;
   }
   function applyObj(o){
@@ -425,7 +425,6 @@
           const nw = Math.round(w*scale), nh = Math.round(h*scale);
           const cv=document.createElement('canvas'); cv.width=nw; cv.height=nh;
           const cx=cv.getContext('2d'); cx.drawImage(img,0,0,nw,nh);
-          // JPEGで軽量化（透過画像でもOKなようにquality 0.9）
           const out = cv.toDataURL('image/jpeg',0.9);
           res(out);
         };
@@ -483,7 +482,6 @@
   function applyDemo(key){
     const t=demos[key]?.(); if(!t) return;
     FIELDS.forEach(k=> { if($('#'+k)) $('#'+k).value=t[k]??''; });
-    // 画像はテンプレでは追加しない（実画像がないため）
   }
   function applyRandom(){ const ks=Object.keys(demos); applyDemo(ks[Math.floor(Math.random()*ks.length)]); }
   function clearDemo(){
