@@ -73,7 +73,7 @@
   <div class="topbar">
     <div class="row">
       <h1>現場実況見分調書</h1>
-      <span id="docId" class="pill">DOC: —</span>
+      <span id="docId" class="pill">ID: —</span>
     </div>
     <span class="badge">岩松県警察 / 現場入力用フォーム</span>
   </div>
@@ -107,18 +107,18 @@
     </div>
   </div>
 
-  <!-- 対応時刻と経過 -->
+  <!-- 対応時刻と経過（覚知・現着） -->
   <div class="card">
     <fieldset class="g-12">
       <legend>対応時刻と経過（自動計算）</legend>
       <div class="grid">
         <div class="g-4">
-          <label>通報受理時刻</label>
-          <input id="tReceive" type="datetime-local">
+          <label>覚知時刻</label>
+          <input id="tAware" type="datetime-local">
           <div class="help">未入力時は「発見／通報日時」を使用</div>
         </div>
         <div class="g-4">
-          <label>臨場（到着）時刻</label>
+          <label>現着時刻</label>
           <input id="tArrival" type="datetime-local">
         </div>
         <div class="g-4">
@@ -128,15 +128,15 @@
         </div>
 
         <div class="g-4">
-          <label>通報 → 臨場（分）</label>
-          <input id="durReceiveToArrival" type="text" readonly>
+          <label>覚知 → 現着（分）</label>
+          <input id="durAwareToArrival" type="text" readonly>
         </div>
         <div class="g-4">
-          <label>臨場 → 終了（分）</label>
+          <label>現着 → 終了（分）</label>
           <input id="durArrivalToEnd" type="text" readonly>
         </div>
         <div class="g-4">
-          <label>通報 → 終了（総経過）</label>
+          <label>覚知 → 終了（総経過）</label>
           <input id="durTotal" type="text" readonly>
         </div>
       </div>
@@ -146,7 +146,18 @@
   <!-- 現場条件 -->
   <div class="card">
     <div class="grid">
-      <div class="g-3"><label>天候</label><input id="weather" placeholder="例：晴れ"></div>
+      <div class="g-3"><label>天候</label>
+        <select id="weather">
+          <option value="">（選択）</option>
+          <option>晴</option>
+          <option>曇</option>
+          <option>雨</option>
+          <option>雪</option>
+          <option>霧</option>
+          <option>強風</option>
+          <option>その他</option>
+        </select>
+      </div>
       <div class="g-3"><label>明るさ</label>
         <select id="light"><option>昼（明所）</option><option>夕方</option><option>夜間（街灯あり）</option><option>夜間（暗所）</option></select>
       </div>
@@ -269,18 +280,21 @@
   const $ = (q)=>document.querySelector(q);
   const FIELDS = [
     'caseTitle','caseType','aff','author','tOccur','tFound','place',
-    'tReceive','tArrival','tEnd', // 対応時刻
+    'tAware','tArrival','tEnd', // 覚知・現着・終了
     'weather','light','surface','wind','reporter','victim','witness','vehicles',
     'overview','timeline','bm','azimuth','device','measures','evidence','photos','note',
     'attendee','tMade','staffNo','sign'
   ];
-  const LSKEY='iwamatsu_genba_jikkou_kenbun_v3';
-  const IMGKEY='iwamatsu_genba_images_v1'; // 画像は別キーに保持
-  let images = []; // {src, name, caption}
+  const LSKEY='iwamatsu_genba_jikkou_kenbun_v4';
+  const IMGKEY='iwamatsu_genba_images_v1';
+  let images = [];
 
-  function genId(){ const d=new Date(),p=n=>String(n).padStart(2,'0');
-    return `GK-${d.getFullYear().toString().slice(-2)}${p(d.getMonth()+1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`;}
-  function setDocId(){ $('#docId').textContent='DOC: '+genId(); }
+  function genId(){
+    const d=new Date(),p=n=>String(n).padStart(2,'0');
+    // 形式： IW-YYMMDD-HHMM
+    return `IW-${String(d.getFullYear()).slice(-2)}${p(d.getMonth()+1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`;
+  }
+  function setDocId(){ $('#docId').textContent='ID: '+genId(); }
   function formatDT(s){ if(!s) return ''; return String(s).replace('T',' ').replace(/:\d\d$/,''); }
   function toDate(s){ return s? new Date(s): null; }
 
@@ -289,11 +303,9 @@
       const el=$('#'+k);
       o[k]= el instanceof HTMLTextAreaElement ? el.value.trim() : (el?.value || '');
     });
-    o.docId = $('#docId').textContent.replace('DOC: ','');
+    o.docId = $('#docId').textContent.replace('ID: ','');
     o.images = images;
-    // 付帯：経過時間を保存用に含める
-    const d=calcDurations();
-    o.durations = d;
+    o.durations = calcDurations();
     return o;
   }
   function applyObj(o){
@@ -318,18 +330,18 @@
   }
 
   function calcDurations(){
-    const tFound = toDate($('#tReceive').value || $('#tFound').value || '');
+    const tAware = toDate($('#tAware').value || $('#tFound').value || '');
     const tArrival = toDate($('#tArrival').value || '');
     const tEnd = toDate($('#tEnd').value || $('#tMade').value || '');
     const diff = (a,b)=> (a&&b)? Math.round((a-b)/60000) : null; // minutes
     return {
-      receiveToArrival: diff(tArrival,tFound),
+      awareToArrival: diff(tArrival,tAware),
       arrivalToEnd: diff(tEnd,tArrival),
-      total: diff(tEnd,tFound)
+      total: diff(tEnd,tAware)
     };
   }
   function renderDurations(d){
-    $('#durReceiveToArrival').value = d.receiveToArrival!=null ? minsToHM(d.receiveToArrival) : '';
+    $('#durAwareToArrival').value = d.awareToArrival!=null ? minsToHM(d.awareToArrival) : '';
     $('#durArrivalToEnd').value = d.arrivalToEnd!=null ? minsToHM(d.arrivalToEnd) : '';
     $('#durTotal').value = d.total!=null ? minsToHM(d.total) : '';
   }
@@ -338,13 +350,14 @@
     const imgs = (o.images||[]).map((im,i)=>`- 画像${i+1}: ${im.name||'image'}（${im.caption||''}）`).join('\n');
     const d = o.durations || calcDurations();
     return `# 現場実況見分調書（${o.docId}）\n\n`+
+    `**ID**: ${o.docId}\n`+
     `**件名**: ${o.caseTitle}　**種別**: ${o.caseType||'—'}\n`+
     `**担当所属**: ${o.aff}　**作成者**: ${o.author}　**作成日時**: ${formatDT(o.tMade)}　**職員番号**: ${o.staffNo||'—'}\n\n`+
     `**発生（推定）**: ${formatDT(o.tOccur)}　**発見/通報**: ${formatDT(o.tFound)}\n`+
     `**所在地**: ${o.place}\n\n`+
     `## 対応時刻・経過\n`+
-    `- 通報受理: ${formatDT(o.tReceive||o.tFound)}　臨場: ${formatDT(o.tArrival)}　終了: ${formatDT(o.tEnd||o.tMade)}\n`+
-    `- 経過: 通報→臨場 ${minsToHM(d.receiveToArrival)} ／ 臨場→終了 ${minsToHM(d.arrivalToEnd)} ／ 総経過 ${minsToHM(d.total)}\n\n`+
+    `- 覚知: ${formatDT(o.tAware||o.tFound)}　現着: ${formatDT(o.tArrival)}　終了: ${formatDT(o.tEnd||o.tMade)}\n`+
+    `- 経過: 覚知→現着 ${minsToHM(d.awareToArrival)} ／ 現着→終了 ${minsToHM(d.arrivalToEnd)} ／ 総経過 ${minsToHM(d.total)}\n\n`+
     `**天候**: ${o.weather||''}　**明るさ**: ${o.light||''}　**路面**: ${o.surface||''}　**風**: ${o.wind||''}\n\n`+
     `**関係者**\n- 通報者/発見者: ${o.reporter||''}\n- 被害者: ${o.victim||''}\n- 参考人: ${o.witness||''}\n- 関係車両: ${o.vehicles||''}\n\n`+
     `## 現場概況\n${o.overview||''}\n\n`+
@@ -372,7 +385,7 @@
 
     const h = `
       <div class="grid">
-        <div class="g-12"><strong>${o.docId}</strong></div>
+        <div class="g-12"><strong>ID: ${esc(o.docId)}</strong></div>
         <div class="g-12">件名：${esc(o.caseTitle)}／種別：${esc(o.caseType||'—')}</div>
         <div class="g-12">担当所属：${esc(o.aff)}／作成者：${esc(o.author)}／作成日時：${esc(formatDT(o.tMade))}／職員番号：${esc(o.staffNo||'—')}</div>
         <div class="g-12">発生（推定）：${esc(formatDT(o.tOccur))}　発見/通報：${esc(formatDT(o.tFound))}</div>
@@ -383,8 +396,8 @@
       <div class="grid">
         <div class="g-12"><strong>対応時刻・経過</strong></div>
         <div class="g-12">
-          通報受理：${esc(formatDT(o.tReceive||o.tFound))} ／ 臨場：${esc(formatDT(o.tArrival))} ／ 終了：${esc(formatDT(o.tEnd||o.tMade))}<br>
-          経過：通報→臨場 <strong>${esc(minsToHM(d.receiveToArrival))}</strong> ／ 臨場→終了 <strong>${esc(minsToHM(d.arrivalToEnd))}</strong> ／ 総経過 <strong>${esc(minsToHM(d.total))}</strong>
+          覚知：${esc(formatDT(o.tAware||o.tFound))} ／ 現着：${esc(formatDT(o.tArrival))} ／ 終了：${esc(formatDT(o.tEnd||o.tMade))}<br>
+          経過：覚知→現着 <strong>${esc(minsToHM(d.awareToArrival))}</strong> ／ 現着→終了 <strong>${esc(minsToHM(d.arrivalToEnd))}</strong> ／ 総経過 <strong>${esc(minsToHM(d.total))}</strong>
         </div>
       </div>
       <div class="hr"></div>
@@ -436,7 +449,7 @@
   function loadDraft(){
     const raw=localStorage.getItem(LSKEY); if(!raw){ alert('保存された下書きはありません'); return; }
     const o=JSON.parse(raw); applyObj(o);
-    $('#docId').textContent='DOC: '+(o.docId || genId());
+    $('#docId').textContent='ID: '+(o.docId || genId());
     alert('下書きを読み込みました');
   }
   function exportJSON(){
@@ -456,7 +469,7 @@
     document.body.classList.add('export-light');
     await new Promise(r=>requestAnimationFrame(r));
     const canvas=await html2canvas($('#previewBody'),{scale:2,backgroundColor:'#ffffff',useCORS:true});
-    const a=document.createElement('a'); a.href=canvas.toDataURL('image/png'); a.download=`${$('#docId').textContent.replace('DOC: ','')}.png`; a.click();
+    const a=document.createElement('a'); a.href=canvas.toDataURL('image/png'); a.download=`${$('#docId').textContent.replace('ID: ','')}.png`; a.click();
     document.body.classList.remove('export-light');
   }
 
@@ -547,8 +560,8 @@
     vandal:()=>({
       caseTitle:'器物損壊事件（駐車場フェンス）', caseType:'盗犯（侵入・万引等）', aff:'響野署 刑事課', author:'岩松 太郎',
       tOccur:'', tFound:isoNow(), place:'響野市中央1-2-3 ○○駐車場 北側フェンス付近',
-      tReceive:'', tArrival:'', tEnd:'',
-      weather:'晴れ', light:'昼（明所）', surface:'乾燥アスファルト', wind:'北西 微風',
+      tAware:'', tArrival:'', tEnd:'',
+      weather:'晴', light:'昼（明所）', surface:'乾燥アスファルト', wind:'北西 微風',
       reporter:'管理人 佐藤次郎 090-XXXX-YYYY', victim:'○○パーキング 管理会社 △△', witness:'—', vehicles:'—',
       overview:`北側フェンス中段1スパン切断。切断面は新鮮で錆なし。周辺に切屑なし。内側に足跡様汚れ少量。`,
       timeline:`14:32 本署より臨場。14:40 封鎖設置。14:45 採証開始（指紋・足跡）。15:05 測定（BM設定）。15:30 終了。`,
@@ -561,11 +574,11 @@
     burglary:()=>({
       caseTitle:'建造物侵入・窃盗（窓ガラス破壊）', caseType:'盗犯（侵入・万引等）', aff:'響野署 刑事課', author:'岩松 太郎',
       tOccur:'', tFound:isoNow(), place:'響野市青葉町2-5-10 一戸建て南側窓',
-      tReceive:'', tArrival:'', tEnd:'',
-      weather:'曇り', light:'夕方', surface:'乾燥コンクリート', wind:'西 弱風',
+      tAware:'', tArrival:'', tEnd:'',
+      weather:'曇', light:'夕方', surface:'乾燥コンクリート', wind:'西 弱風',
       reporter:'住人 A 080-XXXX-YYYY', victim:'住人 A', witness:'向かい住民 B（物音聴取）', vehicles:'—',
       overview:`南側腰窓のガラス割れ（内側散乱多）。こじ開け痕あり。室内は物色状況。`,
-      timeline:`17:05 通報受理。17:25 臨場。17:35 封鎖。17:40 採証（破片/こじ開け痕）。18:10 測定・撮影。`,
+      timeline:`17:05 覚知。17:25 臨場。17:35 封鎖。17:40 採証（破片/こじ開け痕）。18:10 測定・撮影。`,
       bm:'門柱根元', azimuth:'敷地境界線基準', device:'スチールテープ',
       measures:`BM→窓中心 4.80m／窓高 地表1.00m／破片散乱範囲 1.5×2.0m`,
       evidence:`E-01 破片（室内側）\nE-02 マイナスドライバー痕擦過片`,
@@ -575,11 +588,11 @@
     hitrun:()=>({
       caseTitle:'当て逃げ（駐車場・単独）', caseType:'交通事故', aff:'響野署 交通課', author:'岩松 太郎',
       tOccur:'', tFound:isoNow(), place:'響野市駅前2-1-5 商業施設駐車場',
-      tReceive:'', tArrival:'', tEnd:'',
-      weather:'小雨', light:'夜間（街灯あり）', surface:'湿潤アスファルト', wind:'東 微風',
+      tAware:'', tArrival:'', tEnd:'',
+      weather:'雨', light:'夜間（街灯あり）', surface:'湿潤アスファルト', wind:'東 微風',
       reporter:'被害車両運転者 C 070-XXXX-YYYY', victim:'C', witness:'防犯カメラ映像あり（後日押収）', vehicles:'相手不詳（黒色セダンの可能性）',
       overview:`被害車両右後部バンパーに擦過傷。破片や塗膜片少量。スリップ痕なし。`,
-      timeline:`20:10 通報受理。20:25 臨場。20:35 採証（塗膜片）。20:50 測定・撮影。`,
+      timeline:`20:10 覚知。20:25 現着。20:35 採証（塗膜片）。20:50 測定・撮影。`,
       bm:'A列車止め角', azimuth:'駐車区画線基準', device:'メジャー',
       measures:`BM→被害車両後端 2.10m／衝突角度推定 約20〜30°`,
       evidence:`E-01 黒色塗膜片\nE-02 プラスチック破片（小）`,
@@ -613,7 +626,7 @@
   $('#btnDemoClear').addEventListener('click', clearDemo);
 
   // 対応時刻の入力で自動再計算
-  ['tReceive','tArrival','tEnd','tFound','tMade'].forEach(id=>{
+  ['tAware','tArrival','tEnd','tFound','tMade'].forEach(id=>{
     $('#'+id).addEventListener('change', ()=> renderDurations(calcDurations()));
   });
 
@@ -621,8 +634,7 @@
   setDocId();
   const now=new Date(); const isoLocal=new Date(now.getTime()-now.getTimezoneOffset()*60000).toISOString().slice(0,16);
   $('#tFound').value=isoLocal; $('#tMade').value=isoLocal;
-  // デフォルト：通報受理＝tFound、終了＝tMade
-  $('#tReceive').value=''; $('#tEnd').value='';
+  $('#tAware').value=''; $('#tEnd').value='';
 
   // 画像の復元
   loadImages(); renderThumbs();
